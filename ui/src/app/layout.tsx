@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Roboto, Open_Sans, Lato } from "next/font/google";
 import "./globals.css";
+import { Weight } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -11,6 +12,16 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+const roboto=Roboto({
+  weight:'400',
+  subsets:['latin']
+})
+
+const lato=Lato({
+  weight:'400',
+  subsets:['latin'],
+})
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -23,10 +34,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased pr-5`}
-      >
+    <html lang="en" >
+      <body className={`${lato.className} h-screen antialiased pr-5 `} >
         {children}
       </body>
     </html>

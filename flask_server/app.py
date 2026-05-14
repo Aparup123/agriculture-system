@@ -4,11 +4,19 @@ import busio
 import digitalio
 import board
 import adafruit_rfm9x
+import sys
+
+sys.path.append('/home/aparup/Documents/projects/agriculture-system')
 
 from flask import Flask, render_template
 from flask_socketio import SocketIO
+from flask_cors import CORS
+from rag.rag import stream_answer
+from db.connection import curr, conn
 
 app = Flask(__name__)
+# enable CORS for all routes (fetch requests) and sockets
+CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 print("Initializing RA-02 (SX1278) LoRa receiver...")
@@ -57,13 +65,31 @@ def lora_listener():
             print(f"\n📡 PACKET #{packet_count}")
 
             try:
-                text = str(packet, "utf-8")
+                # decode safely
+                text = packet.decode("utf-8", errors="replace")
                 print("Message:", text)
 
                 # Send to web UI
                 socketio.emit("sensor_data", {"data": text})
+
+                sensorValues = [s.strip() for s in text.split(",")]
                 
-            except:
+                try:
+                    
+                    # Insert raw values (avoid raising on parsing); SQLite accepts flexible types
+                    curr.execute(
+                        "INSERT INTO sensor_data (soil_moisture,rain_status,humidity,temperature,temperature_from_bmp,altitude,air_pressure,battery) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",(float(sensorValues[0]), float(sensorValues[1]),float(sensorValues[2]),float(sensorValues[3]),float(sensorValues[4]),float(sensorValues[5]),float(sensorValues[6]),float(sensorValues[7])))
+                    conn.commit()
+                    print("Data inserted into database.")
+                except Exception as e:
+                    import traceback
+                    print("DB insert error:", e)
+                    traceback.print_exc()
+
+            except Exception as e:
+                import traceback
+                print("Packet handling error:", e)
+                traceback.print_exc()
                 print("Raw:", packet)
 
             print("RSSI:", rfm9x.last_rssi)
@@ -79,6 +105,36 @@ def lora_listener():
 def index():
     return "LoRa Receiver Running"
 
+@app.route("/rag")
+def ragRoute():
+    return stream_answer("What is food security?")
+
+
+
+@app.route("/latest-sensor-data")
+def latest_sensor_data():
+    curr.execute("SELECT id, timestamp, soil_moisture, rain_status, humidity, temperature, temperature_from_bmp, altitude, air_pressure, battery FROM sensor_data ORDER BY timestamp DESC LIMIT 10")
+    rows = curr.fetchall()
+    data=[]
+    if rows:
+        for row in rows:
+            data.append({
+                "id": row[0],
+                "timestamp": row[1],
+                "soil_moisture": row[2],
+                "rain_status": row[3],
+                "humidity": row[4],
+                "temperature": row[5],
+                "temperature_from_bmp": row[6],
+                "altitude": row[7],
+                "air_pressure": row[8],
+                "battery": row[9]
+            })
+    
+    else:
+        return {"error": "No data available"}, 404
+    print("Fetched latest sensor data:", data)
+    return {"data": data}
 
 def transmit_data(message):
     """Transmit a message via LoRa"""
